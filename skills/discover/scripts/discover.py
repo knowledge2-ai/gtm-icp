@@ -304,6 +304,20 @@ def _criteria_markdown() -> str:
         return ""
     data = gtm_lib.read_json(path)
     lines = [f"# {data.get('name', 'ICP')}"]
+    gates = data.get("gates", [])
+    if gates:
+        lines.append("\n## Hard gates (a company must satisfy all of these)")
+        for g in gates:
+            lines.append(f"- {g.get('key')}: {g.get('description', '')}")
+    dims = data.get("dimensions", [])
+    if dims:
+        lines.append("\n## Scoring dimensions (stronger on these = better fit)")
+        for d in dims:
+            lines.append(f"- {d.get('key')} (up to {d.get('max_points')} pts): {d.get('description', '')}")
+    verticals = data.get("priority_verticals", [])
+    if verticals:
+        lines.append("\n## Priority verticals\n" + ", ".join(verticals))
+    # Back-compat: older flat-criteria ICP files.
     for c in data.get("criteria", []):
         lines.append(f"- {c.get('key')}: {c.get('description', '')}")
     return "\n".join(lines)

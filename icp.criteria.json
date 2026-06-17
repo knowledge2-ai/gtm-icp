@@ -1,21 +1,29 @@
 {
-  "name": "Example ICP — vertical SaaS buyers",
-  "description": "Edit these to match your ICP. Weights are relative; the scorer normalizes them. Each criterion is judged true/false by the classify skill, grounded on your corpus.",
-  "criteria": [
-    {
-      "key": "vertical_match",
-      "weight": 0.4,
-      "description": "Operates in a target vertical (e.g. industrial automation, vertical SaaS, logistics)."
-    },
-    {
-      "key": "size_fit",
-      "weight": 0.3,
-      "description": "Headcount roughly 100-2000 — past the early-stage chaos, not yet locked into an incumbent suite."
-    },
-    {
-      "key": "ai_posture",
-      "weight": 0.3,
-      "description": "Shows active investment in AI/automation (hiring, product launches, public statements)."
-    }
+  "name": "Example ICP — incumbent vertical SaaS",
+  "description": "Edit to match your ICP. The model has three parts: (1) hard gates, each a boolean the account MUST pass — one failure rejects it regardless of score; (2) graded scoring dimensions, each worth up to max_points — the classify skill awards partial points with evidence; (3) tier thresholds on the normalized 0-100 score. priority_verticals are a hint for discover/classify, not a gate.",
+  "gates": [
+    {"key": "established", "description": "Founded before the current AI-native wave — an incumbent with customers, not a brand-new startup."},
+    {"key": "product_company", "description": "Sells a product, not primarily services or consulting."},
+    {"key": "b2b", "description": "B2B or B2B2C — business customers, enterprise accounts, or partner channels."},
+    {"key": "has_workflow_data", "description": "Owns proprietary workflow/data (transactions, tickets, inventory, claims, schedules, documents, etc.)."},
+    {"key": "budget", "description": "Roughly 25-2000 employees, or smaller if clearly funded — enough budget to buy."},
+    {"key": "not_ai_native", "description": "AI is not the founding premise or core category — leaves room for an AI gap to close."}
+  ],
+  "dimensions": [
+    {"key": "ai_gap", "max_points": 30, "description": "Distance between today's product and what AI could do for it — bigger gap, bigger opportunity."},
+    {"key": "data_workflow_moat", "max_points": 25, "description": "Depth and defensibility of the proprietary data/workflow the product sits on."},
+    {"key": "commercial_urgency", "max_points": 20, "description": "Competitive or market pressure pushing them to act now (funding, churn, new entrants)."},
+    {"key": "budget_access", "max_points": 15, "description": "Ability to fund a deal and reachability of an economic buyer."},
+    {"key": "feasibility", "max_points": 10, "description": "How tractable a first engagement looks — data accessible, scope bounded."}
+  ],
+  "thresholds": {
+    "tier_a": 75,
+    "tier_b": 60
+  },
+  "priority_verticals": [
+    "automotive", "fleet", "telematics", "dealership", "field service",
+    "logistics", "warehouse", "construction", "property", "facilities",
+    "insurance", "claims", "healthcare admin", "manufacturing", "ERP",
+    "compliance", "govtech", "permitting", "legal", "accounting"
   ]
 }

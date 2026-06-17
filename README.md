@@ -28,7 +28,7 @@ for and score accounts with a generic prompt. `gtm-icp` flips both:
 |-------|--------|--------------|
 | **`discover`** | **implemented** | Find ICP-fit companies from a brief — Perplexity-grounded, with no-key DuckDuckGo + seed-list fallbacks. |
 | **`enrich`** | **implemented** | Firmographic enrichment — Apollo-first, no-key local fallback. |
-| **`classify`** | **implemented** | Corpus-grounded ICP verdict + deterministic 0-100 score & A/B/C tier. |
+| **`classify`** | **implemented** | Corpus-grounded ICP verdict — hard gates + graded dimensions → deterministic 0-100 score & A/B/Nurture/Reject tier. |
 | `people` | next | Apollo people search — find the right contacts in each qualified account. |
 | `list` | planned | Ranked CSV + per-account markdown dossier for GTM hand-off. |
 
@@ -75,8 +75,12 @@ fall back to the local path.
 | `perplexity_api_key` | discover (planned) | Discovery disabled; supply accounts directly. |
 | `k2_api_host` + `k2_api_key` | classify, personalize | Grounding falls back to local `corpus/` files. |
 
-Tier cutoffs: `GTM_TIER_A` (default 75), `GTM_TIER_B` (default 45). Artifact
-root: `GTM_ARTIFACT_ROOT` (default `.gtm`).
+The ICP model has three parts (see `icp.criteria.json`): **hard gates** (any
+failure → `Reject`), **graded scoring dimensions** (partial points up to
+`max_points` each), and **tier thresholds** on the normalized 0-100 score. Tier
+cutoffs default to the ICP file's `thresholds` (example: A=75, B=60), overridable
+via `GTM_TIER_A` / `GTM_TIER_B`. Artifact root: `GTM_ARTIFACT_ROOT` (default
+`.gtm`).
 
 ## Testing
 
