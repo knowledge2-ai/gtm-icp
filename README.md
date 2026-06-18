@@ -94,7 +94,7 @@ optional; absent keys fall back to the local path.
 | Key | Used by | Effect when absent |
 |-----|---------|--------------------|
 | `apollo_api_key` | enrich, people | Firmographic-only enrichment; people returns persona targets (titles) instead of contacts. |
-| `perplexity_api_key` | discover (planned) | Discovery disabled; supply accounts directly. |
+| `perplexity_api_key` | discover | Discovery falls back to no-key DuckDuckGo + a seed list; supply accounts directly with `--seeds`. |
 | `k2_api_host` + `k2_api_key` + `k2_corpus_id` | classify, personalize | Grounding (via `skills/classify/scripts/k2_query.py` → `POST …/search:batch`) falls back to local `corpus/` files. |
 
 The ICP model has three parts (see `icp.criteria.json`): **hard gates** (any
@@ -124,8 +124,7 @@ bash skills/personalize/scripts/tests/test_personalize.sh
 The open-core boundary is deliberate: everything backend-free lives here as
 skills (interactive, BYO-keys, developer-first). The parts that genuinely need
 a server — scheduling, durable multi-day sequences, team state — are a separate
-hosted layer, not part of this OSS core. See the companion design docs in the
-`knowledge2-icp` repo for the full rationale.
+hosted layer, not part of this OSS core.
 
 ## License
 
