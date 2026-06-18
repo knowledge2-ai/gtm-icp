@@ -21,14 +21,18 @@ def fake_poster(url, payload, headers, timeout):
     CAPTURED["url"] = url
     CAPTURED["payload"] = payload
     CAPTURED["headers"] = headers
-    return ({"results": [
-        {"query": "won deals", "matches": [
+    # Mirrors the live /search:batch shape: groups under `responses`, hits under
+    # `results`, structured fields under `custom_metadata`, provenance under
+    # `system_metadata.provenance`.
+    return ({"responses": [
+        {"results": [
             {"text": "Won Acme TMS — incumbent logistics, shallow AI add-on.", "score": 0.91,
-             "metadata": {"tier": "A"}},
+             "custom_metadata": {"tier": "A", "total_score": 82},
+             "system_metadata": {"provenance": {"source_uri": "k2://acme/evidence/1"}}},
             {"text": "Lost deal — AI-native startup, no workflow moat.", "score": 0.40},
             {"text": "Won Acme TMS — incumbent logistics, shallow AI add-on.", "score": 0.91},  # dup
         ]},
-        {"query": "logistics positioning", "hits": [
+        {"results": [
             {"content": "Positioning: ground AI on proprietary dispatch data.", "relevance": 0.77},
         ]},
     ]}, None)
@@ -48,7 +52,8 @@ snips = r["snippets"]
 texts = [s["text"] for s in snips]
 assert len(texts) == 3, texts                       # dup collapsed (4 hits -> 3)
 assert texts[0].startswith("Won Acme TMS"), texts   # highest score first (0.91)
-assert snips[0]["metadata"] == {"tier": "A"}, snips[0]
+assert snips[0]["metadata"] == {"tier": "A", "total_score": 82}, snips[0]  # custom_metadata captured
+assert snips[0]["source"] == "k2://acme/evidence/1", snips[0]              # provenance source_uri captured
 assert any(t.startswith("Positioning") for t in texts), texts  # second query group merged in
 
 # top_k is clamped to the server cap.

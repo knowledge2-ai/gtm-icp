@@ -47,8 +47,9 @@ judgment is made against what has actually won, not a bare LLM guess.
      ```
 
      It writes `.gtm/<slug>/grounding.json` — `status: "ok"` with ranked
-     `snippets` (each `text` + `score` + `metadata`) you may cite. Cite only
-     what the snippets actually say.
+     `snippets`, each carrying `text`, `score`, a `source` provenance URI, and
+     `metadata` (tier, total_score, ai_posture, persona_titles, outreach_angle,
+     signal_tags, company/domain). Cite only what the snippets actually say.
    - If K2 is not configured, or the call returns `status: "skipped"`/
      `"warning"`, the same file carries `local_fallback`: the local corpus
      files under `corpus/` (markdown notes on past wins, ICP rationale). Read

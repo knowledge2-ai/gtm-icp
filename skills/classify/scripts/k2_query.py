@@ -100,13 +100,39 @@ def _hit_score(hit):
     return 0.0
 
 
+def _hit_metadata(hit):
+    """The structured fields K2 attaches to a hit.
+
+    The live /search:batch response carries them under `custom_metadata`
+    (tier, total_score, ai_posture, persona_titles, outreach_angle, signal_tags,
+    company/domain, …); older/other shapes use a plain `metadata`. Read either.
+    """
+    for k in ("custom_metadata", "metadata"):
+        v = hit.get(k)
+        if isinstance(v, dict) and v:
+            return v
+    return {}
+
+
+def _hit_source(hit):
+    """A citable source URI for the hit, if present (system_metadata.provenance)."""
+    sysmeta = hit.get("system_metadata")
+    if isinstance(sysmeta, dict):
+        prov = sysmeta.get("provenance")
+        if isinstance(prov, dict) and isinstance(prov.get("source_uri"), str):
+            return prov["source_uri"]
+        if isinstance(sysmeta.get("source_uri"), str):
+            return sysmeta["source_uri"]
+    return None
+
+
 def compact_results(payload, *, cap=8):
     """Flatten a /search:batch payload into ranked, deduped citable snippets.
 
-    The batch endpoint returns one result group per query; each group holds a
-    list of hits. We tolerate the common key spellings (`results`/`matches`/
-    `hits`/`documents`) so a minor server-side rename doesn't silently drop
-    grounding.
+    The batch endpoint nests groups under `responses` (one per query); each
+    group holds its hits under `results`. We tolerate the common key spellings
+    (`results`/`responses`/`matches`/`hits`/`documents`) so a minor server-side
+    rename doesn't silently drop grounding.
     """
     if not isinstance(payload, dict):
         return []
@@ -134,7 +160,8 @@ def compact_results(payload, *, cap=8):
             snippets.append({
                 "text": text,
                 "score": _hit_score(hit),
-                "metadata": hit.get("metadata") if isinstance(hit.get("metadata"), dict) else {},
+                "metadata": _hit_metadata(hit),
+                "source": _hit_source(hit),
                 "query": query,
             })
     snippets.sort(key=lambda s: s["score"], reverse=True)
