@@ -230,6 +230,23 @@ def build_queries(enrich, signals=None):
     return out
 
 
+def resolve_k2_config(env):
+    """Resolve K2 host / key / corpus id from env, accepting common aliases.
+
+    The plugin's canonical vars are K2_API_HOST + K2_API_KEY + K2_CORPUS_ID, but
+    an existing Knowledge2 deployment may expose K2_BASE_URL and named per-corpus
+    ids (K2_EVIDENCE_CORPUS_ID etc., the evidence corpus being the won-deal
+    grounding classify wants). Accept those so the script runs against either
+    naming without re-exporting vars by hand.
+    """
+    host = env.get("K2_API_HOST") or env.get("K2_BASE_URL")
+    api_key = env.get("K2_API_KEY")
+    corpus_id = (env.get("K2_CORPUS_ID")
+                 or env.get("K2_EVIDENCE_CORPUS_ID")
+                 or env.get("K2_CANDIDATE_CORPUS_ID"))
+    return host, api_key, corpus_id
+
+
 def local_corpus_files(root=None):
     """List local corpus markdown files — the no-key grounding source."""
     base = Path(root) if root else PLUGIN_ROOT / "corpus"
@@ -256,9 +273,7 @@ def main(argv=None):
     ap.add_argument("--write", action="store_true", help="write grounding.json into the account dir")
     args = ap.parse_args(argv)
 
-    host = os.environ.get("K2_API_HOST")
-    api_key = os.environ.get("K2_API_KEY")
-    corpus_id = os.environ.get("K2_CORPUS_ID")
+    host, api_key, corpus_id = resolve_k2_config(os.environ)
 
     enrich = signals = {}
     acct_dir = None

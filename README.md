@@ -93,9 +93,9 @@ optional; absent keys fall back to the local path.
 
 | Key | Used by | Effect when absent |
 |-----|---------|--------------------|
-| `apollo_api_key` | enrich, people | Firmographic-only enrichment; people returns persona targets (titles) instead of contacts. |
+| `apollo_api_key` | enrich, people | Firmographic-only enrichment; people returns persona targets (titles) instead of contacts. With a key, people-search yields *teaser* contacts (first name + obfuscated last initial + title, `email_status: available_unrevealed`) — verified emails need a paid Apollo People Match reveal, which the stage does not call. |
 | `perplexity_api_key` | discover | Discovery falls back to no-key DuckDuckGo + a seed list; supply accounts directly with `--seeds`. |
-| `k2_api_host` + `k2_api_key` + `k2_corpus_id` | classify, personalize | Grounding (via `skills/classify/scripts/k2_query.py` → `POST …/search:batch`) falls back to local `corpus/` files. |
+| `k2_api_host` + `k2_api_key` + `k2_corpus_id` | classify, personalize | Grounding (via `skills/classify/scripts/k2_query.py` → `POST …/search:batch`) falls back to local `corpus/` files. Aliases accepted for an existing K2 deployment: `K2_BASE_URL` for the host, and `K2_EVIDENCE_CORPUS_ID` (then `K2_CANDIDATE_CORPUS_ID`) for the corpus id. |
 
 The ICP model has three parts (see `icp.criteria.json`): **hard gates** (any
 failure → `Reject`), **graded scoring dimensions** (partial points up to

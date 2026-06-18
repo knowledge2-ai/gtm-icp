@@ -47,6 +47,12 @@ Per-account artifacts under `.gtm/<slug>/`:
      (`include_similar_titles` on), compacts the results, and **maps each
      contact back to its persona** by title overlap — so a "VP of Product"
      lands under the "Chief Product Officer" persona with its `priority`.
+     Apollo's people-*search* returns a **teaser**: first name, an obfuscated
+     last initial, title, person id, and a `has_email` flag — *not* the full
+     name or email. So a slot looks like `Dana L. · VP of Product ·
+     email_status: available_unrevealed` (`revealed: false`). These are real,
+     targeted contacts; the verified email needs a paid Apollo People Match
+     reveal, which this stage does not call. A `warnings` note flags that.
    - Without a key (or with `--local`), it runs the **no-key fallback**: it
      returns the `persona_targets` — the exact titles a rep should go find.
      Still actionable, zero secrets. Verified contact data (emails, direct
@@ -67,17 +73,20 @@ Per-account artifacts under `.gtm/<slug>/`:
   "source": "apollo",
   "titles_targeted": ["chief product officer", "vp product", ...],
   "people": [
-    {"name": "...", "title": "VP of Product", "persona": "Chief Product Officer",
-     "persona_priority": "primary", "email": "...", "email_status": "verified",
-     "linkedin_url": "...", "location": "...", "organization_name": "..."}
+    {"name": "Dana L.", "title": "VP of Product", "persona": "Chief Product Officer",
+     "persona_priority": "primary", "email": "", "email_status": "available_unrevealed",
+     "linkedin_url": "", "location": "...", "organization_name": "...",
+     "apollo_id": "ap-001", "revealed": false}
   ],
   "persona_targets": [],
-  "warnings": []
+  "warnings": ["...full name/email need a paid People Match reveal..."]
 }
 ```
 
 When `source` is `local`, `people` is empty and `persona_targets` carries the
-titles to pursue.
+titles to pursue. With `source: apollo`, each contact's `revealed` flag tells
+you whether the email is real (`true`) or still gated behind a People Match
+reveal (`false`, `email_status: available_unrevealed`).
 
 ## Notes
 

@@ -53,8 +53,31 @@ by_name = {p["name"]: p for p in out["people"]}
 assert by_name["Dana Lee"]["persona"] == "Chief Product Officer", by_name["Dana Lee"]
 assert by_name["Dana Lee"]["persona_priority"] == "primary", by_name["Dana Lee"]
 assert by_name["Dana Lee"]["location"] == "Austin, TX, USA", by_name["Dana Lee"]
+assert by_name["Dana Lee"]["revealed"] is True, by_name["Dana Lee"]      # real email present
+assert by_name["Dana Lee"]["email_status"] == "verified", by_name["Dana Lee"]
 assert by_name["Sam Okafor"]["persona"] == "Head of Data / AI", by_name["Sam Okafor"]
 assert by_name["Sam Okafor"]["persona_priority"] == "secondary", by_name["Sam Okafor"]
+
+# --- 2b. The real api_search teaser shape: first_name + obfuscated last + flags. ---
+# The live people-search endpoint returns NO `name`/`email` — only first_name, an
+# obfuscated last initial, title, id, and `has_email`. Compaction must surface a
+# usable partial identity, not blanks, and mark the slot unrevealed.
+def teaser_search(domain, titles, api_key, *, per_page=8):
+    raw = {"people": [
+        {"id": "ap-001", "first_name": "Dana", "last_name_obfuscated": "L.",
+         "title": "VP of Product", "has_email": True, "has_direct_phone": True},
+    ]}
+    return {"status": "ok", "people": people._compact_people(raw)}
+
+out = people.gather_people(account, PERSONAS, api_key="fake-key", searcher=teaser_search)
+teaser = out["people"][0]
+assert teaser["name"] == "Dana L.", teaser                       # first + obfuscated last initial
+assert teaser["email"] == "", teaser                             # no email in the teaser
+assert teaser["email_status"] == "available_unrevealed", teaser  # flagged, not faked
+assert teaser["revealed"] is False, teaser
+assert teaser["apollo_id"] == "ap-001", teaser
+assert teaser["persona"] == "Chief Product Officer", teaser
+assert any("reveal" in w.lower() for w in out["warnings"]), out["warnings"]  # honest reveal note
 
 # --- 3. A failing Apollo call degrades to persona targets, never raises. ---
 def boom(domain, titles, api_key, *, per_page=8):

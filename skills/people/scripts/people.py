@@ -104,6 +104,39 @@ def _match_persona(title: str, personas: list[dict]) -> dict:
     return best[1] or (personas[0] if personas else {})
 
 
+def _person_name(item: dict) -> str:
+    """Best display name from a person record.
+
+    Apollo's people-*search* endpoint (`mixed_people/api_search`) is a teaser: it
+    returns `first_name` and an obfuscated `last_name_obfuscated` (e.g. "S."), but
+    NOT the full `name`/`last_name` — those, plus email, are gated behind the paid
+    People Match/Enrichment endpoint. So we build the best name available: full
+    `name` if a reveal/match populated it, else first + obfuscated last initial.
+    """
+    if item.get("name"):
+        return item["name"]
+    first = item.get("first_name") or ""
+    last = item.get("last_name") or item.get("last_name_obfuscated") or ""
+    return " ".join(p for p in (first, last) if p).strip()
+
+
+def _email_status(item: dict) -> str:
+    """Email availability for a person record.
+
+    A revealed record carries a real `email` + `email_status`. The search teaser
+    carries neither — only a `has_email` boolean. Surface that as
+    `available_unrevealed` so a slot reads honestly ("email exists, not yet
+    revealed") rather than looking like a verified address we don't have.
+    """
+    if item.get("email"):
+        return item.get("email_status") or "verified"
+    if item.get("email_status"):
+        return item["email_status"]
+    if item.get("has_email"):
+        return "available_unrevealed"
+    return ""
+
+
 def _compact_people(payload: dict) -> list[dict]:
     raw = payload.get("people") or payload.get("contacts") or []
     items = raw if isinstance(raw, list) else []
@@ -113,14 +146,19 @@ def _compact_people(payload: dict) -> list[dict]:
             continue
         org = item.get("organization") if isinstance(item.get("organization"), dict) else {}
         location = ", ".join(p for p in [item.get("city"), item.get("state"), item.get("country")] if p)
+        email = item.get("email") or ""
         out.append({
-            "name": item.get("name") or "",
+            "name": _person_name(item),
             "title": item.get("title") or "",
-            "email": item.get("email") or "",
-            "email_status": item.get("email_status") or "",
+            "email": email,
+            "email_status": _email_status(item),
             "linkedin_url": item.get("linkedin_url") or "",
             "location": location,
             "organization_name": org.get("name") or "",
+            "apollo_id": item.get("id") or "",
+            # api_search is a teaser; a record is only fully `revealed` once a
+            # People Match call has populated the real email.
+            "revealed": bool(email),
         })
     return out
 
@@ -180,7 +218,14 @@ def gather_people(account: dict, personas: list[dict], *, api_key: str | None,
         people.append({**person,
                        "persona": persona.get("title") or person.get("title", ""),
                        "persona_priority": persona.get("priority") or "unknown"})
-    warnings = [] if people else ["Apollo returned no contacts for the targeted titles."]
+    if not people:
+        warnings = ["Apollo returned no contacts for the targeted titles."]
+    elif not any(p.get("revealed") for p in people):
+        warnings = ["Apollo people-search returns a teaser (first name + obfuscated "
+                    "last initial + title); full name/email need a paid People Match "
+                    "reveal. Slots are real, targeted contacts — emails not yet revealed."]
+    else:
+        warnings = []
     return {**base, "source": "apollo", "people": people,
             "persona_targets": [] if people else persona_targets, "warnings": warnings}
 

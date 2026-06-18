@@ -51,6 +51,54 @@ FIELD_MAP = {
     "short_description": "description",
 }
 
+# Apollo's `industry` string rarely contains the ICP's vertical term verbatim
+# (e.g. it returns "transportation/trucking/railroad", not "logistics"). Map the
+# common Apollo phrasings onto a priority-vertical keyword. A mapping is only
+# applied when its target keyword is in *this* ICP's `priority_verticals`.
+VERTICAL_ALIASES = {
+    "trucking": "logistics", "transportation": "logistics", "freight": "logistics",
+    "railroad": "logistics", "supply chain": "logistics", "logistics": "logistics",
+    "warehousing": "warehouse", "warehouse": "warehouse",
+    "hospital": "healthcare admin", "health care": "healthcare admin",
+    "healthcare": "healthcare admin", "medical": "healthcare admin",
+    "real estate": "property", "property management": "property",
+    "facilities services": "facilities", "facility": "facilities",
+    "automotive": "automotive", "vehicle": "automotive", "dealer": "dealer",
+    "insurance": "insurance", "construction": "construction",
+    "manufacturing": "manufacturing", "machinery": "manufacturing",
+    "law practice": "legal", "legal services": "legal", "legal": "legal",
+    "accounting": "accounting", "government": "govtech",
+}
+
+
+def _map_vertical(industry, verticals, description=""):
+    """Map Apollo `industry` (+ description) onto one of the ICP priority verticals.
+
+    Returns the matched priority-vertical string, or None when nothing fits. A
+    direct substring match wins; otherwise a known Apollo phrase is aliased onto
+    a priority vertical, but only if that target is in *this* ICP's list.
+    """
+    hay = f"{industry or ''} {description or ''}".lower()
+    if not hay.strip():
+        return None
+    for v in verticals or []:
+        if v and v.lower() in hay:
+            return v
+    vset = {v.lower() for v in verticals or [] if v}
+    for phrase, target in VERTICAL_ALIASES.items():
+        if phrase in hay and target.lower() in vset:
+            return target
+    return None
+
+
+def _load_priority_verticals(criteria_path) -> list:
+    try:
+        data = json.loads(Path(criteria_path).read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    pv = data.get("priority_verticals")
+    return [v for v in pv if isinstance(v, str)] if isinstance(pv, list) else []
+
 
 def _apollo_enrich(domain: str, api_key: str) -> dict:
     qs = urllib.parse.urlencode({"domain": domain})
@@ -76,7 +124,7 @@ def _local_enrich(record: dict) -> dict:
     return mapped
 
 
-def enrich(record: dict, *, local: bool) -> dict:
+def enrich(record: dict, *, local: bool, verticals: list | None = None) -> dict:
     api_key = os.environ.get("APOLLO_API_KEY", "").strip()
     domain = record.get("domain") or record.get("website")
     if not local and api_key and domain:
@@ -88,7 +136,15 @@ def enrich(record: dict, *, local: bool) -> dict:
             firmographics["enrichment_warning"] = f"apollo call failed, fell back to local: {exc}"
     else:
         firmographics = _local_enrich(record)
-    return {**record, **firmographics}
+    out = {**record, **firmographics}
+    # Normalize the raw `industry` onto an ICP priority vertical so downstream
+    # query-building/scoring keys off the same taxonomy. Don't overwrite a
+    # vertical the caller already set.
+    if not out.get("vertical"):
+        vertical = _map_vertical(out.get("industry"), verticals, out.get("description"))
+        if vertical:
+            out["vertical"] = vertical
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -96,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--slug", help="account slug under the artifact root")
     ap.add_argument("--input", type=Path, help="path to an input.json record")
     ap.add_argument("--local", action="store_true", help="force no-key local enrichment")
+    ap.add_argument("--criteria", type=Path, default=Path("icp.criteria.json"),
+                    help="ICP file whose `priority_verticals` normalize the vertical")
     args = ap.parse_args(argv)
 
     if args.input:
@@ -107,10 +165,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         ap.error("provide --slug or --input")
 
-    out = enrich(record, local=args.local)
+    out = enrich(record, local=args.local, verticals=_load_priority_verticals(args.criteria))
     path = gtm_lib.write_json(gtm_lib.stage_path(slug, "enrich"), out)
     print(json.dumps({"slug": slug, "enrichment_source": out.get("enrichment_source"),
-                      "artifact": str(path)}))
+                      "vertical": out.get("vertical"), "artifact": str(path)}))
     return 0
 
 

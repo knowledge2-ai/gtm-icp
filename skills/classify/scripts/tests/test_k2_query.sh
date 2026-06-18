@@ -76,7 +76,19 @@ assert any("logistics" in q for q in qs), qs
 assert any("langchain" in q for q in qs), qs   # signal-driven query included
 assert len(qs) == len(set(qs)), qs             # deduped
 
-print("OK: skipped/ok/warning paths, contract shape, compaction, query building")
+# --- env config resolution accepts canonical vars AND deployment aliases ----
+h, k, c = k2.resolve_k2_config({"K2_API_HOST": "https://h", "K2_API_KEY": "key", "K2_CORPUS_ID": "c1"})
+assert (h, k, c) == ("https://h", "key", "c1"), (h, k, c)
+# Alias path: K2_BASE_URL + named evidence corpus (an existing K2 deployment).
+h, k, c = k2.resolve_k2_config({"K2_BASE_URL": "https://b", "K2_API_KEY": "key",
+                                "K2_EVIDENCE_CORPUS_ID": "ev"})
+assert (h, k, c) == ("https://b", "key", "ev"), (h, k, c)
+# Canonical wins over alias when both are present.
+h, _, c = k2.resolve_k2_config({"K2_API_HOST": "https://h", "K2_BASE_URL": "https://b",
+                                "K2_CORPUS_ID": "c1", "K2_EVIDENCE_CORPUS_ID": "ev"})
+assert (h, c) == ("https://h", "c1"), (h, c)
+
+print("OK: skipped/ok/warning paths, contract shape, compaction, query building, env aliases")
 PY
 
 echo "PASS test_k2_query.sh"
