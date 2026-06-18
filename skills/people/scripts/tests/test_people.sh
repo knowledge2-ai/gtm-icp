@@ -60,8 +60,8 @@ assert by_name["Sam Okafor"]["persona_priority"] == "secondary", by_name["Sam Ok
 
 # --- 2b. The real api_search teaser shape: first_name + obfuscated last + flags. ---
 # The live people-search endpoint returns NO `name`/`email` — only first_name, an
-# obfuscated last initial, title, id, and `has_email`. Compaction must surface a
-# usable partial identity, not blanks, and mark the slot unrevealed.
+# obfuscated last initial, title, id, and `has_email`. With reveal=False (teaser
+# only), compaction must surface a usable partial identity, not blanks.
 def teaser_search(domain, titles, api_key, *, per_page=8):
     raw = {"people": [
         {"id": "ap-001", "first_name": "Dana", "last_name_obfuscated": "L.",
@@ -69,7 +69,8 @@ def teaser_search(domain, titles, api_key, *, per_page=8):
     ]}
     return {"status": "ok", "people": people._compact_people(raw)}
 
-out = people.gather_people(account, PERSONAS, api_key="fake-key", searcher=teaser_search)
+out = people.gather_people(account, PERSONAS, api_key="fake-key",
+                           searcher=teaser_search, reveal=False)
 teaser = out["people"][0]
 assert teaser["name"] == "Dana L.", teaser                       # first + obfuscated last initial
 assert teaser["email"] == "", teaser                             # no email in the teaser
@@ -77,7 +78,36 @@ assert teaser["email_status"] == "available_unrevealed", teaser  # flagged, not 
 assert teaser["revealed"] is False, teaser
 assert teaser["apollo_id"] == "ap-001", teaser
 assert teaser["persona"] == "Chief Product Officer", teaser
-assert any("reveal" in w.lower() for w in out["warnings"]), out["warnings"]  # honest reveal note
+
+# --- 2c. Default reveal: People Match unlocks real name + email from the teaser. ---
+# gather_people defaults reveal=True, so the teaser id is sent to the (injected)
+# matcher, which returns the full record; the contact is upgraded in place.
+def fake_match(ids, api_key, *, reveal_emails=True):
+    assert ids == ["ap-001"], ids               # only the unrevealed teaser id sent
+    assert reveal_emails is True, reveal_emails
+    return [{"id": "ap-001", "first_name": "Dana", "last_name": "Lopez",
+             "email": "dana.lopez@incumbent.example", "email_status": "verified",
+             "linkedin_url": "https://linkedin.com/in/danalopez"}]
+
+out = people.gather_people(account, PERSONAS, api_key="fake-key",
+                           searcher=teaser_search, matcher=fake_match)
+got = out["people"][0]
+assert got["name"] == "Dana Lopez", got              # full last name now
+assert got["email"] == "dana.lopez@incumbent.example", got
+assert got["email_status"] == "verified", got
+assert got["revealed"] is True, got
+assert got["linkedin_url"].endswith("danalopez"), got
+assert out["warnings"] == [], out["warnings"]        # fully revealed -> no warning
+
+# A reveal that unlocks nothing keeps the teaser and warns, never raises.
+def empty_match(ids, api_key, *, reveal_emails=True):
+    return [{"id": "ap-001", "first_name": "Dana", "email": "email_not_unlocked@domain.com"}]
+out = people.gather_people(account, PERSONAS, api_key="fake-key",
+                           searcher=teaser_search, matcher=empty_match)
+got = out["people"][0]
+assert got["revealed"] is False, got
+assert got["email"] == "", got                       # locked placeholder not surfaced as email
+assert any("unlock" in w.lower() or "teaser" in w.lower() for w in out["warnings"]), out["warnings"]
 
 # --- 3. A failing Apollo call degrades to persona targets, never raises. ---
 def boom(domain, titles, api_key, *, per_page=8):

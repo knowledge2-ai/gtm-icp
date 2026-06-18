@@ -47,12 +47,13 @@ Per-account artifacts under `.gtm/<slug>/`:
      (`include_similar_titles` on), compacts the results, and **maps each
      contact back to its persona** by title overlap — so a "VP of Product"
      lands under the "Chief Product Officer" persona with its `priority`.
-     Apollo's people-*search* returns a **teaser**: first name, an obfuscated
-     last initial, title, person id, and a `has_email` flag — *not* the full
-     name or email. So a slot looks like `Dana L. · VP of Product ·
-     email_status: available_unrevealed` (`revealed: false`). These are real,
-     targeted contacts; the verified email needs a paid Apollo People Match
-     reveal, which this stage does not call. A `warnings` note flags that.
+     Apollo's people-*search* only returns a teaser (first name, obfuscated
+     last initial, title, person id), so the stage then calls Apollo's **People
+     Match** endpoint to reveal the full name + real email. Each matched
+     contact comes back `revealed: true` with a verified `email` when Apollo
+     holds one; contacts with no email on file resolve to a full name +
+     `email_status: unavailable` (`revealed: false`). The match spends Apollo
+     credits — that's the deliverable of this stage.
    - Without a key (or with `--local`), it runs the **no-key fallback**: it
      returns the `persona_targets` — the exact titles a rep should go find.
      Still actionable, zero secrets. Verified contact data (emails, direct
@@ -73,20 +74,21 @@ Per-account artifacts under `.gtm/<slug>/`:
   "source": "apollo",
   "titles_targeted": ["chief product officer", "vp product", ...],
   "people": [
-    {"name": "Dana L.", "title": "VP of Product", "persona": "Chief Product Officer",
-     "persona_priority": "primary", "email": "", "email_status": "available_unrevealed",
-     "linkedin_url": "", "location": "...", "organization_name": "...",
-     "apollo_id": "ap-001", "revealed": false}
+    {"name": "Josh Nguyen", "title": "Head of Data & AI Products",
+     "persona": "Head of Data / AI", "persona_priority": "secondary",
+     "email": "josh.nguyen@example.com", "email_status": "verified",
+     "linkedin_url": "...", "location": "...", "organization_name": "...",
+     "apollo_id": "6725...", "revealed": true}
   ],
   "persona_targets": [],
-  "warnings": ["...full name/email need a paid People Match reveal..."]
+  "warnings": []
 }
 ```
 
 When `source` is `local`, `people` is empty and `persona_targets` carries the
-titles to pursue. With `source: apollo`, each contact's `revealed` flag tells
-you whether the email is real (`true`) or still gated behind a People Match
-reveal (`false`, `email_status: available_unrevealed`).
+titles to pursue. With `source: apollo`, each contact carries its full name; the
+`revealed` flag tells you whether a verified `email` was unlocked (`true`) or
+Apollo had no email on file (`false`, `email_status: unavailable`).
 
 ## Notes
 

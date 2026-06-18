@@ -8,8 +8,11 @@ the ICP's buying personas to real contacts via Apollo's people-search API.
 Apollo-first with a no-key fallback that still produces value:
 
   * With APOLLO_API_KEY set, search people at the account's domain for the
-    persona titles the ICP declares, and return compacted contacts (name,
-    title, matched persona, email status, LinkedIn).
+    persona titles the ICP declares. Apollo's people-search only returns a
+    teaser (first name + obfuscated last initial + title + id), so this stage
+    then calls Apollo's People Match endpoint to reveal the real name + email,
+    returning fully-resolved contacts (name, title, matched persona, email,
+    LinkedIn). The reveal spends Apollo credits — it's the point of the stage.
   * Without a key (or --local), return the *persona targets* — the exact titles
     a rep should go find — so the stage is still actionable with zero secrets.
     This mirrors the boundary in enrich: verified contact data needs a paid key.
@@ -49,6 +52,9 @@ USER_AGENT = "gtm-icp/0.1 (+https://github.com/knowledge2-ai/gtm-icp)"
 # Verify against current Apollo docs before relying in production:
 # https://docs.apollo.io/reference/people-search
 APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/api/v1/mixed_people/api_search"
+# People Match (enrichment) — reveals full name/email; spends credits. Opt-in.
+# https://docs.apollo.io/reference/bulk-people-enrichment
+APOLLO_PEOPLE_MATCH = "https://api.apollo.io/api/v1/people/bulk_match"
 
 # Used when the ICP declares no `personas`.
 DEFAULT_PERSONAS = [
@@ -128,7 +134,8 @@ def _email_status(item: dict) -> str:
     `available_unrevealed` so a slot reads honestly ("email exists, not yet
     revealed") rather than looking like a verified address we don't have.
     """
-    if item.get("email"):
+    email = item.get("email") or ""
+    if email and "email_not_unlocked" not in email:
         return item.get("email_status") or "verified"
     if item.get("email_status"):
         return item["email_status"]
@@ -147,6 +154,9 @@ def _compact_people(payload: dict) -> list[dict]:
         org = item.get("organization") if isinstance(item.get("organization"), dict) else {}
         location = ", ".join(p for p in [item.get("city"), item.get("state"), item.get("country")] if p)
         email = item.get("email") or ""
+        # Apollo returns a locked placeholder until a reveal credit is spent.
+        if "email_not_unlocked" in email:
+            email = ""
         out.append({
             "name": _person_name(item),
             "title": item.get("title") or "",
@@ -183,12 +193,87 @@ def apollo_search_people(domain: str, titles: list[str], api_key: str, *,
     return {"status": "ok", "people": _compact_people(payload)}
 
 
+def apollo_bulk_match(ids: list[str], api_key: str, *, reveal_emails: bool = True,
+                      timeout: float = 20.0) -> list[dict]:
+    """Reveal full name/email for Apollo person ids via the People Match endpoint.
+
+    This SPENDS Apollo enrichment credits — one per matched person, plus a reveal
+    credit when `reveal_personal_emails` surfaces a personal email — so it is
+    never the default path; only `gather_people(..., reveal=True)` calls it.
+    Returns the raw `matches` list aligned to `ids` (a missed id yields a null).
+    Verify the contract against current Apollo docs before production:
+    https://docs.apollo.io/reference/bulk-people-enrichment
+    """
+    body = {
+        "details": [{"id": pid} for pid in ids if pid],
+        "reveal_personal_emails": bool(reveal_emails),
+    }
+    req = Request(APOLLO_PEOPLE_MATCH, data=json.dumps(body).encode("utf-8"),
+                  method="POST", headers={
+                      "accept": "application/json", "content-type": "application/json",
+                      "cache-control": "no-cache", "x-api-key": api_key, "User-Agent": USER_AGENT,
+                  })
+    with urlopen(req, timeout=timeout) as resp:
+        payload = json.loads(resp.read(4_000_000).decode("utf-8", errors="replace"))
+    matches = payload.get("matches")
+    return matches if isinstance(matches, list) else []
+
+
+def reveal_people(people: list[dict], api_key: str, *, matcher=apollo_bulk_match,
+                  reveal_emails: bool = True) -> tuple[list[dict], list[str]]:
+    """Upgrade teaser contacts to revealed name/email via Apollo People Match.
+
+    Opt-in and credit-spending. Mutates `people` in place, overlaying the
+    revealed `name`/`email`/`linkedin_url` and flipping `revealed=True` for any
+    contact whose email unlocked. Returns (people, warnings). Never raises — a
+    failed reveal leaves the teaser contacts untouched.
+    """
+    ids = [p.get("apollo_id") for p in people if p.get("apollo_id") and not p.get("revealed")]
+    if not ids:
+        return people, []
+    try:
+        matches = matcher(ids, api_key, reveal_emails=reveal_emails)
+    except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+        return people, [f"apollo reveal failed, kept teaser contacts: {exc}"]
+    by_id = {m["id"]: m for m in (matches or [])
+             if isinstance(m, dict) and m.get("id")}
+    unlocked = 0
+    for person in people:
+        match = by_id.get(person.get("apollo_id"))
+        if not match:
+            continue
+        name = _person_name(match)
+        if name:
+            person["name"] = name
+        if match.get("linkedin_url"):
+            person["linkedin_url"] = match["linkedin_url"]
+        email = match.get("email") or ""
+        if "email_not_unlocked" in email:
+            email = ""
+        if email:
+            person["email"] = email
+            person["email_status"] = match.get("email_status") or "verified"
+            person["revealed"] = True
+            unlocked += 1
+        else:
+            person["email_status"] = _email_status(match)
+    warnings = [] if unlocked else ["apollo reveal returned no unlocked emails."]
+    return people, warnings
+
+
 def gather_people(account: dict, personas: list[dict], *, api_key: str | None,
-                  searcher=apollo_search_people, per_page: int = 8) -> dict:
+                  searcher=apollo_search_people, per_page: int = 8,
+                  reveal: bool = True, matcher=apollo_bulk_match) -> dict:
     """Resolve contacts for the account, degrading to persona targets w/o a key.
 
     `searcher(domain, titles, api_key, per_page=...)` is injectable for offline
     tests. Never raises — a failed Apollo call falls back to persona targets.
+
+    Apollo's people-search only returns a teaser (first name + obfuscated last +
+    title + id), so by default this follows it with a People Match call
+    (`matcher`, injectable) to unlock the real name/email. Both `searcher` and
+    `matcher` are injectable for offline tests; `reveal=False` keeps the teaser
+    only (used by the offline teaser test).
     """
     company = account.get("company_name") or account.get("company") or ""
     domain = _clean_domain(account.get("domain") or account.get("website") or "")
@@ -218,16 +303,21 @@ def gather_people(account: dict, personas: list[dict], *, api_key: str | None,
         people.append({**person,
                        "persona": persona.get("title") or person.get("title", ""),
                        "persona_priority": persona.get("priority") or "unknown"})
+    reveal_warnings = []
+    if people and reveal:
+        people, reveal_warnings = reveal_people(people, api_key, matcher=matcher)
+
     if not people:
         warnings = ["Apollo returned no contacts for the targeted titles."]
     elif not any(p.get("revealed") for p in people):
-        warnings = ["Apollo people-search returns a teaser (first name + obfuscated "
-                    "last initial + title); full name/email need a paid People Match "
-                    "reveal. Slots are real, targeted contacts — emails not yet revealed."]
+        warnings = ["Apollo People Match unlocked no emails for these contacts "
+                    "(no email on file, or out of credits). Showing the search "
+                    "teaser — real, targeted contacts with name/title but no email."]
     else:
         warnings = []
     return {**base, "source": "apollo", "people": people,
-            "persona_targets": [] if people else persona_targets, "warnings": warnings}
+            "persona_targets": [] if people else persona_targets,
+            "warnings": warnings + reveal_warnings}
 
 
 def main(argv: list[str] | None = None) -> int:
