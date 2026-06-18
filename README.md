@@ -1,6 +1,6 @@
 # gtm-icp
 
-**GTM-as-code: a backend-free Claude plugin that enriches, classifies and scores B2B accounts against an ICP — grounded on your own corpus, bring your own keys.**
+**GTM-as-code: a backend-free Claude plugin that finds B2B accounts matching your ICP, then enriches, classifies and scores them into a prioritized target list for outreach — grounded on your own corpus, bring your own keys.**
 
 > Working name. This is an early scaffold: one end-to-end vertical slice
 > (`enrich → classify → score`) is implemented; the rest of the pipeline is

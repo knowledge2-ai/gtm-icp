@@ -1,7 +1,7 @@
 {
   "name": "gtm-icp",
   "version": "0.1.0",
-  "description": "GTM-as-code: a backend-free Claude plugin that enriches, classifies and scores B2B accounts against an ICP — grounded on your own corpus, bring your own keys.",
+  "description": "GTM-as-code: a backend-free Claude plugin that finds B2B accounts matching your ICP, then enriches, classifies and scores them into a prioritized target list for outreach — grounded on your own corpus, bring your own keys.",
   "author": {
     "name": "knowledge2-icp"
   },
