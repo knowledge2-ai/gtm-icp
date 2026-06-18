@@ -32,10 +32,11 @@ write("acme",
                             "discovery": "careers-link", "postings": [{"title": "ML Eng"}]}},
       people={"source": "apollo", "people": [
           {"name": "Dana Lee", "title": "VP Product", "persona": "Chief Product Officer",
-           "persona_priority": "primary", "email_status": "verified",
+           "persona_priority": "primary", "email": "dana@acme.example",
+           "email_status": "verified", "revealed": True,
            "linkedin_url": "https://linkedin.com/in/danalee"},
           {"name": "Sam Okafor", "title": "Head of Data", "persona": "Head of Data / AI",
-           "persona_priority": "secondary", "email_status": "guessed"}],
+           "persona_priority": "secondary", "email": "", "email_status": "unavailable"}],
           "persona_targets": []})
 
 # A B-tier with no contacts (no-key people path -> persona targets).
@@ -69,16 +70,19 @@ assert out["accounts"] == 3 and out["actionable"] == 2, out
 csv_text = (root / "_report" / "accounts.csv").read_text()
 header, *rows = [r for r in csv_text.splitlines() if r]
 assert header.startswith("rank,company,domain,tier,score"), header
-# Reject excluded from the default CSV; Acme row carries signals + contact count.
+assert "top_contact_email" in header, header  # revealed email gets its own column
+# Reject excluded from the default CSV; Acme row carries signals + contact + email.
 assert "AINative" not in csv_text, "Reject should be excluded by default"
 acme_row = next(r for r in rows if r.startswith("1,Acme"))
 assert "ai_hiring" in acme_row and "greenhouse" in acme_row and "Dana Lee" in acme_row, acme_row
+assert "dana@acme.example" in acme_row, "revealed email must land in the CSV row"
 
 dossier = (root / "_report" / "dossier.md").read_text()
 assert "# ICP Qualification Dossier" in dossier
 assert "2 actionable account(s); 3 scored total." in dossier
 assert "## Acme — Tier A (84/100)" in dossier
 assert "ai_hiring" in dossier and "Dana Lee" in dossier
+assert "dana@acme.example" in dossier, "revealed email must show in the dossier contact line"
 assert "Hiring board: greenhouse/acme91 (careers-link)" in dossier
 assert "AINative" not in dossier, "Reject excluded from default dossier"
 # MidCo with no contacts falls back to its persona targets.

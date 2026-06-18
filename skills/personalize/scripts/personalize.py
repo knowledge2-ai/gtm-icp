@@ -88,6 +88,8 @@ def _draft_for(recipient: dict, company: str, evidence: list[dict], cfg: dict) -
     ])
     return {
         "recipient": name,
+        "to": recipient.get("email", ""),
+        "to_status": recipient.get("email_status", ""),
         "title": recipient.get("title", ""),
         "persona": recipient.get("persona") or recipient.get("title", ""),
         "persona_priority": recipient.get("persona_priority", "unknown"),
@@ -125,6 +127,9 @@ def gather_personalize(score: dict, signals: dict, people: dict, enrich: dict,
                         "strengthen the grounding before sending.")
     if not recipients:
         warnings.append("no contacts or persona targets — run the people stage first.")
+    elif contacts and not any(d.get("to") for d in drafts):
+        warnings.append("contacts resolved but none have a revealed email — drafts "
+                        "name a person but aren't send-ready (Apollo had no email).")
 
     return {"company_name": company, "domain": domain, "tier": score.get("tier"),
             "drafts": drafts, "warnings": warnings}

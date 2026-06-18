@@ -19,14 +19,16 @@ signals = {"signals_detected": [
     "hiring_boards": {"provider": "greenhouse", "board_slug": "acme91",
                       "postings": [{"title": "ML Engineer"}, {"title": "Data Eng"}]}}
 
-# --- 1. With a real contact -> grounded draft addressed by first name. ---
+# --- 1. With a revealed contact -> grounded draft addressed to the real email. ---
 people = {"source": "apollo", "people": [
     {"name": "Dana Lee", "title": "VP Product", "persona": "Chief Product Officer",
-     "persona_priority": "primary"}], "persona_targets": []}
+     "persona_priority": "primary", "email": "dana@acme.example",
+     "email_status": "verified", "revealed": True}], "persona_targets": []}
 out = pz.gather_personalize(score, signals, people, enrich)
 assert len(out["drafts"]) == 1, out
 d = out["drafts"][0]
 assert d["recipient"] == "Dana Lee" and d["status"] == "template", d
+assert d["to"] == "dana@acme.example" and d["to_status"] == "verified", d  # send-ready address
 assert d["body"].startswith("Hi Dana,"), d["body"]
 assert "Acme" in d["subject"], d["subject"]
 # Body is grounded on the detected hiring signal, not generic.
@@ -34,6 +36,15 @@ assert "langchain" in d["body"].lower(), d["body"]
 keys = {g["signal"] for g in d["grounded_on"]}
 assert "ai_hiring" in keys and "hiring_board" in keys, keys
 assert out["warnings"] == [], out["warnings"]
+
+# --- 1b. Contact resolved but no email -> draft names the person, warns not send-ready. ---
+people_noemail = {"source": "apollo", "people": [
+    {"name": "Pat Roe", "title": "VP Product", "persona": "Chief Product Officer",
+     "persona_priority": "primary", "email": "", "email_status": "unavailable"}],
+    "persona_targets": []}
+out_ne = pz.gather_personalize(score, signals, people_noemail, enrich)
+assert out_ne["drafts"][0]["to"] == "", out_ne["drafts"][0]
+assert any("send-ready" in w for w in out_ne["warnings"]), out_ne["warnings"]
 
 # --- 2. No contacts -> address the persona targets by role, no first name. ---
 people2 = {"source": "local", "people": [],

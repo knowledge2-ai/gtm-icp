@@ -39,8 +39,8 @@ TIER_RANK = {"A": 0, "B": 1, "Nurture": 2, "Reject": 4}
 CSV_FIELDS = [
     "rank", "company", "domain", "tier", "score", "gates_failed",
     "signals_found", "hiring_provider", "contacts", "people_source",
-    "top_contact", "top_contact_title", "top_contact_email_status",
-    "top_contact_linkedin", "rationale",
+    "top_contact", "top_contact_title", "top_contact_email",
+    "top_contact_email_status", "top_contact_linkedin", "rationale",
 ]
 
 
@@ -130,6 +130,7 @@ def to_csv(records: list[dict]) -> str:
             "people_source": r["people_source"],
             "top_contact": top.get("name", ""),
             "top_contact_title": top.get("title", ""),
+            "top_contact_email": top.get("email", ""),
             "top_contact_email_status": top.get("email_status", ""),
             "top_contact_linkedin": top.get("linkedin_url", ""),
             "rationale": r["rationale"],
@@ -168,7 +169,9 @@ def _account_section(r: dict) -> list[str]:
         lines += ["", "### Contacts", ""]
         for p in r["contacts"]:
             persona = f"{p.get('persona')}, {p.get('persona_priority')}"
-            tail = " · ".join(x for x in [p.get("email_status"), p.get("linkedin_url")] if x)
+            # Lead with the revealed email; fall back to the availability status.
+            email = p.get("email") or (f"email {p.get('email_status')}" if p.get("email_status") else "")
+            tail = " · ".join(x for x in [email, p.get("linkedin_url")] if x)
             lines.append(f"- **{p.get('name')}** — {p.get('title')} ({persona})"
                          + (f" · {tail}" if tail else ""))
     elif r["persona_targets"]:

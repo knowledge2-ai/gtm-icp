@@ -51,9 +51,11 @@ Reads, per account dir under the artifact root:
 
 - **`_report/accounts.csv`** — columns: `rank, company, domain, tier, score,
   gates_failed, signals_found, hiring_provider, contacts, people_source,
-  top_contact, top_contact_title, top_contact_email_status,
+  top_contact, top_contact_title, top_contact_email, top_contact_email_status,
   top_contact_linkedin, rationale`. The top contact is the highest-priority
-  persona match for the account.
+  persona match for the account; `top_contact_email` carries the address the
+  people stage revealed (blank when Apollo had none, with the reason in
+  `top_contact_email_status`).
 - **`_report/dossier.md`** — one section per account: tier/score, rationale,
   failed gates, score breakdown, detected intent signals (with an evidence
   snippet), the hiring board (provider/slug + how it was discovered), and the

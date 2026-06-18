@@ -64,7 +64,8 @@ Per account dir under the artifact root:
 {
   "company_name": "...", "domain": "...", "tier": "A",
   "drafts": [
-    {"recipient": "Dana Lee", "title": "VP Product", "persona": "Chief Product Officer",
+    {"recipient": "Dana Lee", "to": "dana@acme.example", "to_status": "verified",
+     "title": "VP Product", "persona": "Chief Product Officer",
      "channel": "email", "subject": "...", "body": "...", "cta": "...",
      "grounded_on": [{"signal": "ai_hiring", "snippet": "...hiring for LangChain..."}],
      "status": "template"}
@@ -75,6 +76,10 @@ Per account dir under the artifact root:
 
 ## Notes
 
+- **`to` is the send address.** It carries the email the people stage revealed,
+  with `to_status` (e.g. `verified`) for confidence. When a contact resolved but
+  Apollo had no email, `to` is blank and a warning flags the draft as not
+  send-ready — it still names a real person to reach another way.
 - **Grounded, not guessed.** The whole point is that "I noticed you're hiring
   LangChain engineers" beats "I hope this email finds you well." The
   `grounded_on` list is the contract — copy that strays from it is a regression.
