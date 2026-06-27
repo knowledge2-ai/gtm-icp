@@ -21,6 +21,17 @@
     "tier_a": 75,
     "tier_b": 60
   },
+  "anti_icp": {
+    "description": "Red flags are soft disqualifiers — unlike a hard gate (one failure rejects), a single red flag is tolerated, but `deprioritize_at` or more co-occurring red flags demote the account to Nurture regardless of score. classify judges each `present: true|false` with evidence, mirroring gates.",
+    "deprioritize_at": 2,
+    "red_flags": [
+      {"key": "ai_native_pivot", "description": "Has publicly rebuilt the core product around AI / repositioned as AI-native — the gap is already closing without us."},
+      {"key": "pe_cost_cutting", "description": "Recently PE-acquired into a cost-cutting/rollup posture — opex frozen, no appetite for new platform spend."},
+      {"key": "no_eng_capacity", "description": "No real engineering team (outsourced dev shop, or pure reseller) — can't integrate or sustain an AI build."},
+      {"key": "active_displacement", "description": "Already committed to a competing AI platform or a recent in-house build — no room to land."},
+      {"key": "winding_down", "description": "Layoffs, sunset announcements, or acquisition-in-progress — buying motion frozen."}
+    ]
+  },
   "signals": [
     {
       "key": "ai_hiring",
