@@ -61,4 +61,37 @@ out_r="$(GTM_ARTIFACT_ROOT="$WORK/.gtm" python3 "$SCORE" --slug gated)"
 echo "$out_r" | grep -q '"tier": "Reject"'        || fail "expected tier Reject ($out_r)"
 echo "$out_r" | grep -q '"not_ai_native"'         || fail "expected failed gate listed ($out_r)"
 
+# Red flags (anti-ICP, stolen from gtm-starter-kit): soft disqualifiers that
+# DEPRIORITIZE on 2+, unlike hard gates which auto-Reject. One flag is tolerated.
+mkdir -p "$WORK/.gtm/oneflag" "$WORK/.gtm/twoflags"
+
+# A-grade points + a single red flag -> still tier A (1 < 2 threshold), flag surfaced.
+cat >"$WORK/.gtm/oneflag/classify.json" <<'JSON'
+{"company_name": "OneFlag",
+ "gates": [{"key": "established", "passed": true, "evidence": "founded 2012"}],
+ "red_flags": [
+   {"key": "pe_owned_cost_cutting", "present": true,  "evidence": "PE rollup, opex freeze"},
+   {"key": "no_eng_team",           "present": false, "evidence": "has 40 engineers"}
+ ],
+ "dimensions": [{"key": "ai_gap", "points_awarded": 84, "max_points": 100, "evidence": "x"}]}
+JSON
+out_1f="$(GTM_ARTIFACT_ROOT="$WORK/.gtm" python3 "$SCORE" --slug oneflag)"
+echo "$out_1f" | grep -q '"tier": "A"'                  || fail "1 flag must not demote ($out_1f)"
+echo "$out_1f" | grep -q '"pe_owned_cost_cutting"'      || fail "red flag should be listed ($out_1f)"
+
+# Same A-grade points + two red flags -> deprioritized to Nurture.
+cat >"$WORK/.gtm/twoflags/classify.json" <<'JSON'
+{"company_name": "TwoFlags",
+ "gates": [{"key": "established", "passed": true, "evidence": "founded 2012"}],
+ "red_flags": [
+   {"key": "pe_owned_cost_cutting", "present": true, "evidence": "PE rollup, opex freeze"},
+   {"key": "no_eng_team",           "present": true, "evidence": "outsourced dev shop"}
+ ],
+ "dimensions": [{"key": "ai_gap", "points_awarded": 84, "max_points": 100, "evidence": "x"}]}
+JSON
+out_2f="$(GTM_ARTIFACT_ROOT="$WORK/.gtm" python3 "$SCORE" --slug twoflags)"
+echo "$out_2f" | grep -q '"tier": "Nurture"'            || fail "2 flags should deprioritize ($out_2f)"
+echo "$out_2f" | grep -q '"deprioritized": true'        || fail "expected deprioritized flag ($out_2f)"
+echo "$out_2f" | grep -q '"score": 84.0'                || fail "score itself unchanged ($out_2f)"
+
 echo "PASS test_score.sh"

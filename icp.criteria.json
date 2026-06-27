@@ -21,26 +21,56 @@
     "tier_a": 75,
     "tier_b": 60
   },
+  "anti_icp": {
+    "description": "Red flags are soft disqualifiers — unlike a hard gate (one failure rejects), a single red flag is tolerated, but `deprioritize_at` or more co-occurring red flags demote the account to Nurture regardless of score. classify judges each `present: true|false` with evidence, mirroring gates.",
+    "deprioritize_at": 2,
+    "red_flags": [
+      {"key": "ai_native_pivot", "description": "Has publicly rebuilt the core product around AI / repositioned as AI-native — the gap is already closing without us."},
+      {"key": "pe_cost_cutting", "description": "Recently PE-acquired into a cost-cutting/rollup posture — opex frozen, no appetite for new platform spend."},
+      {"key": "no_eng_capacity", "description": "No real engineering team (outsourced dev shop, or pure reseller) — can't integrate or sustain an AI build."},
+      {"key": "active_displacement", "description": "Already committed to a competing AI platform or a recent in-house build — no room to land."},
+      {"key": "winding_down", "description": "Layoffs, sunset announcements, or acquisition-in-progress — buying motion frozen."}
+    ]
+  },
   "signals": [
     {
       "key": "ai_hiring",
       "informs": "commercial_urgency",
+      "points": 35,
       "keywords": ["langchain", "llamaindex", "llm", "rag", "vector database", "prompt engineering", "mlops", "generative ai", "machine learning engineer"],
       "interpretation": "Open roles for AI/LLM skills (e.g. hiring LangChain engineers) = the company feels AI pressure and is building in-house. Raises commercial urgency and confirms the AI gap is real but not yet productized."
     },
     {
       "key": "ai_product_surface",
       "informs": "ai_gap",
+      "points": 25,
       "keywords": ["ai assistant", "ai copilot", "ai-powered", "gpt", "generative", "ai agent"],
       "interpretation": "Public AI product language. Thin or marketing-only mentions (no paid SKU, no case study) widen the ai_gap; deep, productized AI narrows it."
     },
     {
       "key": "workflow_data_surface",
       "informs": "data_workflow_moat",
+      "points": 20,
       "keywords": ["api", "integration", "workflow", "dispatch", "work order", "inventory", "claims", "inspection", "telematics", "scheduling"],
       "interpretation": "Operational-workflow and data-integration language signals a proprietary data/workflow moat to ground AI on."
     }
   ],
+  "positioning": {
+    "description": "Seller context for the personalize stage. value_pillars are what we actually win on (lead the rewrite on one, backed by proof); do_not_say are forbidden claims — overpromises, competitor bashing, unverifiable numbers — every draft is checked against them before sending.",
+    "value_pillars": [
+      {"name": "You already own the data", "proof": "The workflow/transaction data the AI needs is yours — no buying, no cold start."},
+      {"name": "Grounded, not generative guesswork", "proof": "Answers cite your records; we right-size retrieval to your corpus instead of hand-waving an LLM."},
+      {"name": "First AI feature in weeks, not a platform rebuild", "proof": "We map one high-value surface and ship against your real product, not a slideware roadmap."}
+    ],
+    "do_not_say": [
+      "guaranteed ROI",
+      "10x",
+      "revolutionary",
+      "fully autonomous",
+      "rip and replace",
+      "we beat <competitor>"
+    ]
+  },
   "priority_verticals": [
     "automotive", "dealer", "dealership", "fleet", "telematics",
     "field service", "maintenance", "logistics", "warehouse", "construction",

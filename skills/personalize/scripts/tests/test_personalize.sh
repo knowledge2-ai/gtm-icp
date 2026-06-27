@@ -96,8 +96,32 @@ d6 = out6["drafts"][0]
 assert d6["template"] == "workflow-efficiency", d6["template"]
 assert "workflows" in d6["subject"], d6["subject"]
 
+# --- 7. Positioning (stolen from gtm-starter-kit): value pillars surfaced for the
+#        LLM rewrite, and "what not to say" forbidden claims flagged per draft. ---
+assert pz.check_guardrails("We promise GUARANTEED ROI here", ["guaranteed roi"]) == ["guaranteed roi"]
+assert pz.check_guardrails("clean, specific copy", ["10x", "best-in-class"]) == []
+
+positioning = {
+    "value_pillars": [{"name": "Grounded on your own data", "proof": "Relay case study: 6 wks to first AI feature"}],
+    "do_not_say": ["guaranteed ROI", "10x"],
+}
+cfg_bad = {"angle": "We deliver guaranteed ROI and 10x your pipeline.", "cta": "Call?"}
+out7 = pz.gather_personalize(score, signals, people, enrich, cfg_bad, positioning=positioning)
+# Pillars + forbidden list pass through so the skill's rewrite can use them.
+assert out7["value_pillars"] == positioning["value_pillars"], out7.get("value_pillars")
+assert out7["do_not_say"] == ["guaranteed ROI", "10x"], out7.get("do_not_say")
+# The offending draft flags both banned phrases, and the account warns.
+d7 = out7["drafts"][0]
+assert set(d7["guardrail_warnings"]) == {"guaranteed ROI", "10x"}, d7.get("guardrail_warnings")
+assert any("forbidden" in w.lower() for w in out7["warnings"]), out7["warnings"]
+
+# A clean body (default angle) trips no guardrails.
+out7b = pz.gather_personalize(score, signals, people, enrich, positioning=positioning)
+assert out7b["drafts"][0]["guardrail_warnings"] == [], out7b["drafts"][0].get("guardrail_warnings")
+assert not any("forbidden" in w.lower() for w in out7b["warnings"]), out7b["warnings"]
+
 print("OK: grounded draft w/ contact, persona-role fallback, no-signal warning, "
-      "ICP override, recency reorder, persona routing")
+      "ICP override, recency reorder, persona routing, positioning guardrails")
 PY
 
 echo "PASS test_personalize.sh"

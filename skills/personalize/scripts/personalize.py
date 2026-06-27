@@ -173,8 +173,20 @@ def _evidence_line(company: str, evidence: list[dict]) -> str:
     return snippet or f"public signals at {company} worth a closer look"
 
 
+def check_guardrails(body: str, do_not_say: list[str]) -> list[str]:
+    """Return the `do_not_say` phrases that appear in `body` (case-insensitive).
+
+    The positioning block's "what not to say" list — overpromises, competitor
+    bashing, unverifiable claims. The deterministic draft rarely trips these, but
+    the check earns its keep on the `personalize` skill's LLM rewrite, which must
+    re-run it: a banned phrase that survives is a hard stop before sending.
+    """
+    low = body.lower()
+    return [phrase for phrase in (do_not_say or []) if phrase.lower() in low]
+
+
 def _draft_for(recipient: dict, company: str, evidence: list[dict], cfg: dict,
-               signal_keys: set[str]) -> dict:
+               signal_keys: set[str], do_not_say: list[str] | None = None) -> dict:
     name = (recipient.get("name") or "").strip()
     first = name.split()[0] if name else ""
     greeting = f"Hi {first}," if first else "Hi there,"
@@ -200,19 +212,27 @@ def _draft_for(recipient: dict, company: str, evidence: list[dict], cfg: dict,
         "body": body,
         "cta": cfg["cta"],
         "grounded_on": evidence[:3],
+        "guardrail_warnings": check_guardrails(body, do_not_say or []),
         "status": "template",
     }
 
 
 def gather_personalize(score: dict, signals: dict, people: dict, enrich: dict,
                        outreach_cfg: dict | None = None, *,
+                       positioning: dict | None = None,
                        reference_date: date | None = None) -> dict:
     """Build template drafts for an account. Pure — injectable for offline tests.
 
     ``reference_date`` anchors the recency downweight; defaults to today and is
-    injectable so evidence ordering is deterministic under test.
+    injectable so evidence ordering is deterministic under test. ``positioning``
+    is the ICP's seller block — `value_pillars` (passed through so the skill's
+    rewrite leads on a real pillar) and `do_not_say` (forbidden claims each draft
+    is checked against).
     """
     cfg = {**DEFAULT_OUTREACH, **(outreach_cfg or {})}
+    positioning = positioning or {}
+    value_pillars = positioning.get("value_pillars", [])
+    do_not_say = positioning.get("do_not_say", [])
     reference = reference_date or date.today()
     company = score.get("company_name") or enrich.get("company_name") or "your team"
     domain = enrich.get("domain") or enrich.get("website") or signals.get("domain") or ""
@@ -228,7 +248,7 @@ def gather_personalize(score: dict, signals: dict, people: dict, enrich: dict,
         recipients = [{"name": "", "title": t.get("title", ""), "persona": t.get("title", ""),
                        "persona_priority": t.get("priority", "unknown")} for t in targets]
 
-    drafts = [_draft_for(r, company, evidence, cfg, signal_keys) for r in recipients]
+    drafts = [_draft_for(r, company, evidence, cfg, signal_keys, do_not_say) for r in recipients]
 
     warnings = []
     if not evidence:
@@ -239,8 +259,13 @@ def gather_personalize(score: dict, signals: dict, people: dict, enrich: dict,
     elif contacts and not any(d.get("to") for d in drafts):
         warnings.append("contacts resolved but none have a revealed email — drafts "
                         "name a person but aren't send-ready (Apollo had no email).")
+    flagged = sorted({p for d in drafts for p in d.get("guardrail_warnings", [])})
+    if flagged:
+        warnings.append("drafts contain forbidden claims (positioning.do_not_say): "
+                        + ", ".join(flagged) + " — rewrite before sending.")
 
     return {"company_name": company, "domain": domain, "tier": score.get("tier"),
+            "value_pillars": value_pillars, "do_not_say": do_not_say,
             "drafts": drafts, "warnings": warnings}
 
 
@@ -249,6 +274,14 @@ def _load_outreach_cfg(criteria_path: Path) -> dict:
         cfg = gtm_lib.read_json(criteria_path).get("outreach")
         if isinstance(cfg, dict):
             return cfg
+    return {}
+
+
+def _load_positioning(criteria_path: Path) -> dict:
+    if criteria_path.exists():
+        pos = gtm_lib.read_json(criteria_path).get("positioning")
+        if isinstance(pos, dict):
+            return pos
     return {}
 
 
@@ -276,7 +309,8 @@ def main(argv: list[str] | None = None) -> int:
                "warnings": ["tier is Reject — skipped outreach (use --force to override)."]}
     else:
         out = gather_personalize(score, read("signals"), read("people"), read("enrich"),
-                                 _load_outreach_cfg(args.criteria))
+                                 _load_outreach_cfg(args.criteria),
+                                 positioning=_load_positioning(args.criteria))
 
     path = gtm_lib.write_json(gtm_lib.stage_path(args.slug, "personalize"), out)
     print(json.dumps({"slug": args.slug, "tier": tier, "drafts": len(out.get("drafts", [])),

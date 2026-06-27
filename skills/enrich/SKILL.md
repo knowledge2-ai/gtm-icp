@@ -71,6 +71,15 @@ you the account conversationally — see `_shared/artifact-structure.md`).
    evidence too**: `found: false` on AI-product keywords legitimately widens an
    incumbent's `ai_gap`. `GITHUB_TOKEN` is optional (raises the GitHub rate
    limit); all fetches are best-effort and degrade to warnings.
+   - **Signal decay + combinations.** `signals.json` also carries a
+     `signal_summary`: each found signal is age-decayed from its evidence date
+     (0–30d full weight, then 75/50/25%, expiring past ~6 months — undated stays
+     neutral), weighted by the signal's `points` (declared per group in
+     `icp.criteria.json`), and a one-time combination bonus is added when ≥2
+     *fresh* signals co-fire. `weighted_score` is the headline. The point: a
+     stale "hiring LangChain" post from last year shouldn't read as live intent,
+     and two fresh signals together predict more than either alone. `classify`
+     should lean on **fresh** signals and discount `expired` ones.
 5. For a batch, loop both scripts per account — one artifact dir each. (Entity
    fan-out across many accounts is the natural place to dispatch parallel
    subagents; keep each account's enrich isolated to its own slug.)

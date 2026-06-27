@@ -131,7 +131,61 @@ dout = signals.gather_signals({"company_name": "Fresh", "domain": "fresh.example
 dated_ev = dout["signals_detected"][0]["evidence"]
 assert dated_ev and all(e.get("published_at") == "2026-06-01" for e in dated_ev), dated_ev
 
-print("OK: ai_hiring->commercial_urgency, absence handled, github scanned, recency dates captured")
+# --- Signal decay + combinations (stolen from gtm-starter-kit's scoring model). ---
+# A signal's predictive power fades with age; co-firing fresh signals earn a bonus.
+# Decay bands: 0-30d=100%, 31-60d=75%, 61-90d=50%, 91-180d=25%, 180+=expired(0).
+assert signals._decay_multiplier(0) == 1.0 and signals._decay_multiplier(30) == 1.0
+assert signals._decay_multiplier(45) == 0.75
+assert signals._decay_multiplier(75) == 0.5
+assert signals._decay_multiplier(120) == 0.25
+assert signals._decay_multiplier(200) == 0.0, "180+ days expires"
+assert signals._decay_multiplier(None) == 1.0, "undated stays neutral, never reads as old"
+
+from datetime import date as _date
+TODAY = _date(2026, 6, 27)
+# Three found signals at different ages: fresh (10d), decaying (75d), expired (300d).
+DETECTED = [
+    {"key": "ai_hiring", "informs": "commercial_urgency", "found": True,
+     "evidence": [{"published_at": "2026-06-17"}]},                       # 10 days -> 100%
+    {"key": "ai_product_surface", "informs": "ai_gap", "found": True,
+     "evidence": [{"published_at": "2026-04-13"}]},                       # 75 days -> 50%
+    {"key": "legacy_news", "informs": "ai_gap", "found": True,
+     "evidence": [{"published_at": "2025-08-31"}]},                       # 300 days -> expired
+    {"key": "absent", "informs": "x", "found": False, "evidence": []},    # not found -> ignored
+]
+summary = signals.summarize_signals(DETECTED, TODAY,
+    points_by_key={"ai_hiring": 35, "ai_product_surface": 20, "legacy_news": 20})
+fresh_keys = {f["key"] for f in summary["fresh"]}
+assert fresh_keys == {"ai_hiring", "ai_product_surface"}, fresh_keys
+assert {e["key"] for e in summary["expired"]} == {"legacy_news"}, summary["expired"]
+# Per-signal decay annotations are written back onto the detected entries.
+by_key = {s["key"]: s for s in DETECTED}
+assert by_key["ai_hiring"]["decay_multiplier"] == 1.0 and by_key["ai_hiring"]["weighted_points"] == 35.0
+assert by_key["ai_product_surface"]["weighted_points"] == 10.0   # 20 * 0.50
+assert by_key["legacy_news"]["expired"] is True
+# Two distinct fresh signals co-fire -> combination bonus applied once.
+assert summary["combination"] is not None, "two fresh signals should combine"
+assert set(summary["combination"]["co_firing"]) == {"ai_hiring", "ai_product_surface"}
+# Weighted score = 35 (fresh) + 10 (decayed) + 10 (combo bonus) = 55; expired adds nothing.
+assert summary["weighted_score"] == 55.0, summary["weighted_score"]
+
+# A lone fresh signal earns no combination bonus.
+solo = signals.summarize_signals(
+    [{"key": "only", "informs": "x", "found": True, "evidence": [{"published_at": "2026-06-20"}]}],
+    TODAY)
+assert solo["combination"] is None, "single signal must not combine"
+
+# gather_signals attaches the summary end-to-end (uses an injectable reference date).
+gout = signals.gather_signals({"company_name": "Fresh", "domain": "fresh.example"},
+    [{"key": "workflow_data_surface", "informs": "data_workflow_moat",
+      "keywords": ["dispatch", "api"], "points": 15}],
+    fetcher=dated_fetch, gh=no_gh, boards=no_boards, today=TODAY)
+assert "signal_summary" in gout, "gather_signals should attach signal_summary"
+assert gout["signal_summary"]["reference_date"] == "2026-06-27"
+# The single dated signal (2026-06-01 = 26 days) is fresh at full weight.
+assert gout["signal_summary"]["weighted_score"] == 15.0, gout["signal_summary"]
+
+print("OK: ai_hiring->commercial_urgency, absence handled, github scanned, recency dates captured, decay+combinations")
 PY
 
 echo "PASS test_signals.sh"

@@ -38,7 +38,7 @@ import os
 import re
 import socket
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus, urlparse
@@ -365,6 +365,97 @@ def hiring_boards(company: str, domain: str, *, fetcher=http_get_json,
 
 
 # --------------------------------------------------------------------------- #
+# Signal decay + combinations
+# --------------------------------------------------------------------------- #
+# A signal's predictive power fades with age — a "hiring LangChain engineers"
+# post from 200 days ago is not the live buying intent a 10-day-old one is.
+# Stolen from gtm-starter-kit's signal-scoring model: full weight when fresh,
+# zero past ~6 months. Undated evidence stays NEUTRAL (full weight) — absence of
+# a date never reads as "old", consistent with the recency-capture note above.
+DECAY_BANDS = [(30, 1.0), (60, 0.75), (90, 0.5), (180, 0.25)]  # (max_age_days, multiplier)
+DEFAULT_SIGNAL_POINTS = 20.0   # per-signal base weight when the ICP declares none
+COMBINATION_BONUS = 10.0       # awarded once when >=2 distinct fresh signals co-fire
+
+
+def _decay_multiplier(age_days: int | None) -> float:
+    """Age (in days) -> score multiplier per the decay bands; undated -> 1.0."""
+    if age_days is None:
+        return 1.0
+    age_days = max(0, age_days)
+    for max_age, mult in DECAY_BANDS:
+        if age_days <= max_age:
+            return mult
+    return 0.0
+
+
+def _parse_iso_date(value: object) -> date | None:
+    """Parse a YYYY-MM-DD(...) string to a date; None if absent/unparseable."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _freshest_age_days(evidence: list[dict], today: date) -> int | None:
+    """Smallest age across dated evidence items; None when all are undated."""
+    ages = [(today - d).days for e in evidence
+            if (d := _parse_iso_date(e.get("published_at"))) is not None]
+    return min(ages) if ages else None
+
+
+def summarize_signals(detected: list[dict], today: date, *,
+                      points_by_key: dict[str, float] | None = None) -> dict:
+    """Apply age-decay to each found signal and reward co-firing fresh signals.
+
+    Mutates each *found* entry in ``detected`` with ``age_days``,
+    ``decay_multiplier``, ``weighted_points`` and ``expired`` so classify/
+    personalize can lead on live intent and discount stale news. Returns a
+    summary: the fresh/expired splits, an optional combination bonus (>=2 fresh
+    signals), and a weighted score (sum of fresh weights + any bonus).
+    """
+    points_by_key = points_by_key or {}
+    fresh, expired = [], []
+    weighted = 0.0
+    for sig in detected:
+        if not sig.get("found"):
+            continue
+        age = _freshest_age_days(sig.get("evidence", []), today)
+        mult = _decay_multiplier(age)
+        base = float(points_by_key.get(sig.get("key"), DEFAULT_SIGNAL_POINTS))
+        weight = round(base * mult, 1)
+        sig["age_days"] = age
+        sig["decay_multiplier"] = mult
+        sig["weighted_points"] = weight
+        sig["expired"] = mult == 0.0
+        entry = {"key": sig.get("key"), "informs": sig.get("informs"),
+                 "age_days": age, "decay_multiplier": mult, "weighted_points": weight}
+        if mult == 0.0:
+            expired.append(entry)
+        else:
+            fresh.append(entry)
+            weighted += weight
+
+    combination = None
+    if len(fresh) >= 2:
+        combination = {
+            "co_firing": [f["key"] for f in fresh],
+            "distinct_dimensions": sorted({f["informs"] for f in fresh if f["informs"]}),
+            "bonus": COMBINATION_BONUS,
+        }
+        weighted += COMBINATION_BONUS
+
+    return {
+        "reference_date": today.isoformat(),
+        "fresh": fresh,
+        "expired": expired,
+        "combination": combination,
+        "weighted_score": round(weighted, 1),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Keyword scanning
 # --------------------------------------------------------------------------- #
 def scan_text(text: str, keywords: list[str]) -> list[tuple[str, str]]:
@@ -382,12 +473,14 @@ def scan_text(text: str, keywords: list[str]) -> list[tuple[str, str]]:
 
 
 def gather_signals(account: dict, signal_groups: list[dict], *,
-                   fetcher=http_get_text, gh=github_repos, boards=hiring_boards) -> dict:
+                   fetcher=http_get_text, gh=github_repos, boards=hiring_boards,
+                   today: date | None = None) -> dict:
     """Fetch public sources for the account and detect ICP signal keywords.
 
     `fetcher(url) -> (text, ats_refs, error)`, `gh(company, domain) -> {...}`, and
     `boards(company, domain, discovered=...) -> {...}` are injectable so this runs
-    fully offline under test.
+    fully offline under test. `today` pins the decay reference date (tests pin it;
+    production defaults to the current UTC date).
     """
     company = account.get("company_name") or account.get("company") or ""
     domain = (account.get("domain") or account.get("website") or "").replace(
@@ -467,11 +560,18 @@ def gather_signals(account: dict, signal_groups: list[dict], *,
             "evidence": evidence[:8],
         })
 
+    # 4. Age-decay each found signal and reward co-firing fresh signals, so
+    #    downstream stages lead on live intent and discount stale news.
+    points_by_key = {g.get("key"): g["points"] for g in signal_groups if g.get("points") is not None}
+    summary = summarize_signals(detected, today or datetime.now(timezone.utc).date(),
+                                points_by_key=points_by_key)
+
     return {
         "company_name": company,
         "domain": domain,
         "sources_checked": [u for u, _, _ in source_texts],
         "signals_detected": detected,
+        "signal_summary": summary,
         "hiring_boards": {
             "status": boards_result.get("status"),
             "provider": provider,

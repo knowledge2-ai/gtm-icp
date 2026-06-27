@@ -31,7 +31,8 @@ Per account dir under the artifact root:
 - `people.json` (optional) — contacts to address (or persona targets if no key).
 - `enrich.json` (optional) — company + domain.
 - `icp.criteria.json` — an optional `outreach` block (`angle`, `offer`, `cta`)
-  overrides the default messaging.
+  overrides the default messaging; an optional `positioning` block supplies
+  `value_pillars` (what you actually win on) and `do_not_say` (forbidden claims).
 
 ## Workflow
 
@@ -56,9 +57,14 @@ Per account dir under the artifact root:
    when known) — do not anchor on something that reads as stale or years-old.
    Do not invent facts, numbers, or signals that aren't in `grounded_on`; if the
    grounding is thin (a `no public signals` warning), say less rather than
-   fabricate. Follow the selected `template`'s framing, keep the subject tight,
-   set `status: "llm"` on the drafts you rewrite, and write the updated
-   `personalize.json` back.
+   fabricate. **Tie the offer to one `value_pillars` entry** (top-level in
+   `personalize.json`) — say what you actually win on, backed by its proof —
+   and **never use a `do_not_say` phrase**. Each draft carries
+   `guardrail_warnings`: any forbidden phrase the template tripped. After you
+   rewrite, re-check your copy against `do_not_say` and clear those warnings —
+   a banned claim left in is a hard stop. Follow the selected `template`'s
+   framing, keep the subject tight, set `status: "llm"` on the drafts you
+   rewrite, and write the updated `personalize.json` back.
 4. Surface the drafts to the user for review. **Do not send anything** — outreach
    is sent by the user through their own tool; this stage only drafts.
 

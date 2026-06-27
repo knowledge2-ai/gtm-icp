@@ -31,6 +31,9 @@ judgment is made against what has actually won, not a bare LLM guess.
   - **`gates`** — boolean must-pass conditions. One failure → tier `Reject`.
   - **`dimensions`** — graded conditions, each worth up to `max_points`.
   - **`thresholds`** — `tier_a` / `tier_b` cutoffs on the normalized 0-100 score.
+  - **`anti_icp`** — red flags (soft disqualifiers). Unlike a gate, a single red
+    flag is tolerated; `deprioritize_at` (default 2) co-occurring flags demote the
+    account to Nurture regardless of score.
   - **`signals`** — keyword groups that map public-source signals to dimensions
     (consumed by `enrich`'s signal scan; you read the *results* in `signals.json`).
 
@@ -70,7 +73,12 @@ judgment is made against what has actually won, not a bare LLM guess.
    LangChain engineers → actively closing AI gap" for `commercial_urgency`). A
    `found: false` AI-product signal is itself evidence of a wide `ai_gap`. Prefer
    a cited signal over a firmographic guess.
-4. **Write the verdict** to `.gtm/<slug>/classify.json`:
+4. **Check the red flags.** For each `anti_icp.red_flags` entry, decide
+   `present: true|false` with one line of `evidence`. Default to `present: false`
+   unless the evidence actually shows it — red flags deprioritize, so don't guess
+   them into existence. A lone flag is fine; the score script demotes only when
+   `deprioritize_at` or more co-occur.
+5. **Write the verdict** to `.gtm/<slug>/classify.json`:
 
    ```json
    {
@@ -78,6 +86,10 @@ judgment is made against what has actually won, not a bare LLM guess.
      "gates": [
        {"key": "established",    "passed": true,  "evidence": "Founded 2014 (enrich.json)."},
        {"key": "not_ai_native",  "passed": true,  "evidence": "Core product is a TMS; AI is a recent add-on."}
+     ],
+     "red_flags": [
+       {"key": "ai_native_pivot",     "present": false, "evidence": "AI is an add-on module, not the core product."},
+       {"key": "active_displacement", "present": false, "evidence": "No competing AI platform mentioned."}
      ],
      "dimensions": [
        {"key": "ai_gap",             "points_awarded": 24, "max_points": 30, "evidence": "..."},
@@ -89,7 +101,7 @@ judgment is made against what has actually won, not a bare LLM guess.
    }
    ```
 
-5. **Score deterministically:**
+6. **Score deterministically:**
 
    ```bash
    python3 ${CLAUDE_PLUGIN_ROOT}/skills/classify/scripts/score.py --slug <slug>
@@ -99,11 +111,13 @@ judgment is made against what has actually won, not a bare LLM guess.
    normalized 0-100 `score` (sum of awarded points / sum of max points), a tier,
    and the breakdown. The score is pure arithmetic over your verdicts — **no LLM
    judges the score**, so it's reproducible and auditable. A failed gate forces
-   tier `Reject`; otherwise the score maps to `A` / `B` / `Nurture` by the ICP
-   thresholds (override with `GTM_TIER_A` / `GTM_TIER_B`).
-6. **Report** the tier, score, any failed gates, and the dimensions that drove
-   the score, with the evidence lines. The evidence is the point — a number with
-   no grounding is what every commodity wrapper already produces.
+   tier `Reject`; `deprioritize_at`+ red flags force `Nurture` (with
+   `deprioritized: true`); otherwise the score maps to `A` / `B` / `Nurture` by
+   the ICP thresholds (override with `GTM_TIER_A` / `GTM_TIER_B`, red-flag limit
+   with `GTM_RED_FLAG_LIMIT`).
+7. **Report** the tier, score, any failed gates or red flags, and the dimensions
+   that drove the score, with the evidence lines. The evidence is the point — a
+   number with no grounding is what every commodity wrapper already produces.
 
 ## Why grounding matters here
 
