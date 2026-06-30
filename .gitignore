@@ -1,5 +1,11 @@
-# Pipeline run artifacts (per-account working dirs)
-.gtm/
+# Pipeline run artifacts (per-account working dirs — may contain contact PII)
+.gtm*/
+
+# Generated reports (contain contact PII)
+*.xlsx
+
+# One-off scratch scripts
+scratch_*.py
 
 # Python
 __pycache__/
